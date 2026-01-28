@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veo Director Pro - AI 提示詞生成器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & Babel CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide CDN - 使用更穩定的 UMD 版本 -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        /* 避免圖標未載入時的版面跳動 */
+        .icon-placeholder { display: inline-block; width: 1em; height: 1em; }
+    </style>
+</head>
+<body class="bg-[#0f172a]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 定義資料庫
+        const CATEGORIES = {
+            SHOTS: [
+                { id: 'els', label: '極遠景', value: 'An extreme long shot showing', description: '環境交代', icon: '🌍' },
+                { id: 'ls', label: '遠景', value: 'A wide long shot of', description: '全身與環境', icon: '🚶' },
+                { id: 'ms', label: '中景', value: 'A medium shot of', description: '腰部以上', icon: '🕴️' },
+                { id: 'cu', label: '特寫', value: 'A close-up shot focusing on', description: '臉部/表情', icon: '👤' },
+                { id: 'ecu', label: '大特寫', value: 'An extreme close-up detail of', description: '局部細節', icon: '👁️' },
+                { id: 'ots', label: '過肩鏡頭', value: 'An over-the-shoulder perspective of', description: '對話感', icon: '👥' },
+            ],
+            ANGLES: [
+                { id: 'eye', label: '平視', value: 'at eye level', description: '自然中性', icon: '👁️' },
+                { id: 'low', label: '仰視', value: 'from a low angle, making the subject look heroic', description: '英雄感', icon: '🆙' },
+                { id: 'high', label: '俯視', value: 'from a high angle, looking down', description: '渺小感', icon: '🔽' },
+                { id: 'birds', label: '鳥瞰', value: 'from a top-down birds-eye view', description: '上帝視角', icon: '🦅' },
+                { id: 'worms', label: '蟲瞻', value: 'from a ground-level worms-eye view', description: '極端宏偉', icon: '🐛' },
+                { id: 'dutch', label: '傾斜', value: 'with a dramatic dutch angle tilt', description: '不安緊張', icon: '📐' },
+            ],
+            STYLES: [
+                { id: 'realistic', label: '超寫實', value: 'in a hyper-realistic cinematic style, with lifelike textures', description: '真實電影', icon: '📸' },
+                { id: 'pixar', label: '皮克斯風', value: 'in a high-end Pixar-style 3D animation, vibrant and charming', description: '3D 動畫', icon: '🧸' },
+                { id: 'anime', label: '動漫風', value: 'in a classic high-quality Japanese anime style, Studio Ghibli inspired', description: '手繪感', icon: '🌸' },
+                { id: 'cyber', label: '賽博龐克', value: 'in a futuristic cyberpunk aesthetic with high-tech details', description: '科技未來', icon: '🌃' },
+                { id: 'oil', label: '古典油畫', value: 'as a classical oil painting with rich brushstrokes and textures', description: '藝術氣息', icon: '🎨' },
+                { id: 'retro', label: '復古底片', value: 'in a grainy 1970s vintage film aesthetic, nostalgic mood', description: '懷舊質感', icon: '🎞️' },
+            ],
+            MOVEMENTS: [
+                { id: 'dolly', label: '推進/拉遠', value: 'The camera slowly dollies in towards the scene', description: '情緒推進', icon: '🚂' },
+                { id: 'pan', label: '水平搖攝', value: 'The camera pans smoothly across the horizon', description: '橫向掃描', icon: '↔️' },
+                { id: 'tilt', label: '垂直搖攝', value: 'The camera tilts up to reveal more details', description: '垂直揭示', icon: '↕️' },
+                { id: 'orbit', label: '環繞運鏡', value: 'A cinematic 360-degree orbit shot around the subject', description: '全方位展示', icon: '🔄' },
+                { id: 'handheld', label: '手持震動', value: 'Handheld camera movement with slight natural shakes', description: '真實感', icon: '🤝' },
+                { id: 'drone', label: '無人機跟拍', value: 'A smooth drone follow shot gliding through the air', description: '流暢大氣', icon: '🚁' },
+            ],
+            ATMOSPHERE: [
+                { id: 'golden', label: '黃金小時', value: 'bathed in warm golden hour sunlight', description: '柔和光影', icon: '🌇' },
+                { id: 'noir', label: '黑色電影', value: 'with high-contrast film noir lighting and deep shadows', description: '硬核光影', icon: '🕶️' },
+                { id: 'neon', label: '霓虹氛圍', value: 'illuminated by vibrant cyberpunk neon lights', description: '科技感', icon: '🚨' },
+                { id: 'foggy', label: '迷霧繚繞', value: 'shrouded in heavy atmospheric fog and volumetric haze', description: '神祕感', icon: '🌫️' },
+                { id: 'dreamy', label: '夢幻柔光', value: 'with a soft-focus dreamy aesthetic and light leaks', description: '超現實', icon: '✨' },
+            ]
+        };
+
+        // 安全的圖標組件
+        const Icon = ({ name, size = 18, className = "" }) => {
+            useEffect(() => {
+                // 確保 lucide 在全域可用後執行
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+
+            // 轉換 CamelCase 到 kebab-case 以符合 lucide 要求
+            const iconName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+            
+            return (
+                <i 
+                    data-lucide={iconName} 
+                    style={{ width: size, height: size }}
+                    className={`inline-block ${className}`}
+                ></i>
+            );
+        };
+
+        const App = () => {
+            const [subject, setSubject] = useState('');
+            const [selections, setSelections] = useState({
+                shot: null, angle: null, movement: null, atmosphere: null, style: null,
+            });
+            const [aspectRatio, setAspectRatio] = useState('16:9');
+            const [copied, setCopied] = useState(false);
+            const [isJsonMode, setIsJsonMode] = useState(false);
+
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, []);
+
+            const handleSelect = (category, item) => {
+                setSelections(prev => ({
+                    ...prev,
+                    [category]: prev[category]?.id === item.id ? null : item
+                }));
+            };
+
+            const generatePrompt = () => {
+                const s = subject || 'a cinematic scene';
+                const shot = selections.shot ? selections.shot.value : 'A cinematic shot of';
+                const angle = selections.angle ? selections.angle.value : '';
+                const style = selections.style ? selections.style.value : 'with realistic cinematic lighting';
+                const atmos = selections.atmosphere ? selections.atmosphere.value : '';
+                const move = selections.movement ? selections.movement.value : 'The camera remains static';
+
+                let prompt = `${shot} ${s} ${angle}, ${style} ${atmos ? `, ${atmos}` : ''}. ${move}.`;
+                prompt = prompt.replace(/\s+/g, ' ').replace(/ ,/g, ',').trim();
+                prompt += ` 8k resolution, highly detailed, professional cinematography. --ar ${aspectRatio}`;
+                return prompt;
+            };
+
+            const generateJson = () => {
+                const data = {
+                    subject: subject || 'a cinematic scene',
+                    visual_style: selections.style?.label || 'Realistic',
+                    camera_setup: { shot: selections.shot?.label, angle: selections.angle?.label },
+                    movement: selections.movement?.label,
+                    aspect_ratio: aspectRatio,
+                    full_prompt: generatePrompt()
+                };
+                return JSON.stringify(data, null, 2);
+            };
+
+            const copyToClipboard = () => {
+                const text = isJsonMode ? generateJson() : generatePrompt();
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+                document.body.removeChild(textArea);
+            };
+
+            const reset = () => {
+                setSubject('');
+                setSelections({ shot: null, angle: null, movement: null, atmosphere: null, style: null });
+            };
+
+            return (
+                <div className="min-h-screen bg-[#0f172a] text-slate-100 p-4 md:p-8">
+                    <div className="max-w-7xl mx-auto">
+                        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg">
+                                    <Icon name="Video" size={32} className="text-white" />
+                                </div>
+                                <div>
+                                    <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-2">
+                                        Veo <span className="text-indigo-400">Director</span> 
+                                        <span className="text-[10px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full">PRO</span>
+                                    </h1>
+                                    <p className="text-slate-400 text-sm mt-1">混合式影片風格提示詞生成器</p>
+                                </div>
+                            </div>
+                            <button onClick={reset} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm border border-slate-700 flex items-center gap-2 transition-colors">
+                                <Icon name="RefreshCw" size={14} /> 重置
+                            </button>
+                        </header>
+
+                        <main className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                            <div className="lg:col-span-8 space-y-6">
+                                <section className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 shadow-2xl">
+                                    <label className="flex items-center gap-2 text-xs font-bold mb-4 text-indigo-400 uppercase tracking-widest">
+                                        <Icon name="Layers" size={14} /> STEP 1: 主體與動作
+                                    </label>
+                                    <textarea rows="2" placeholder="描述你的畫面主體..." className="w-full bg-[#0f172a] border border-slate-700 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-lg" value={subject} onChange={(e) => setSubject(e.target.value)} />
+                                </section>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {[
+                                        { key: 'style', title: '視覺風格', data: CATEGORIES.STYLES, color: 'text-pink-400', icon: 'Palette' },
+                                        { key: 'shot', title: '景別', data: CATEGORIES.SHOTS, color: 'text-blue-400', icon: 'Camera' },
+                                        { key: 'angle', title: '視角', data: CATEGORIES.ANGLES, color: 'text-blue-400', icon: 'Maximize' },
+                                        { key: 'movement', title: '運鏡', data: CATEGORIES.MOVEMENTS, color: 'text-emerald-400', icon: 'Wind' },
+                                        { key: 'atmosphere', title: '氛圍', data: CATEGORIES.ATMOSPHERE, color: 'text-amber-400', icon: 'Sparkles' }
+                                    ].map(cat => (
+                                        <section key={cat.key} className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800">
+                                            <h3 className={`flex items-center gap-2 text-xs font-bold mb-4 ${cat.color} uppercase tracking-widest`}>
+                                                <Icon name={cat.icon} size={14} /> {cat.title}
+                                            </h3>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {cat.data.map(item => (
+                                                    <button key={item.id} onClick={() => handleSelect(cat.key, item)} className={`flex flex-col items-start p-3 rounded-2xl border transition-all ${selections[cat.key]?.id === item.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-700 bg-slate-900/50 hover:border-slate-500'}`}>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-xl">{item.icon}</span>
+                                                            <span className="font-bold text-xs">{item.label}</span>
+                                                        </div>
+                                                        <span className="text-[9px] text-slate-500 line-clamp-1 text-left">{item.description}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-4 space-y-6">
+                                <section className="bg-[#1e293b] p-8 rounded-3xl border border-slate-800 shadow-2xl sticky top-8">
+                                    <h3 className="flex items-center gap-2 text-xs font-bold mb-6 text-emerald-400 uppercase tracking-widest"><Icon name="Monitor" size={14} /> 輸出預覽</h3>
+                                    <div className="mb-8">
+                                        <label className="text-[10px] text-slate-500 block mb-4 font-bold uppercase tracking-widest">比例</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {['16:9', '9:16', '21:9', '4:3', '1:1', '2.39:1'].map(ratio => (
+                                                <button key={ratio} onClick={() => setAspectRatio(ratio)} className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${aspectRatio === ratio ? 'bg-emerald-500 border-emerald-500 text-slate-900' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}>{ratio}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-8">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">內容模式</label>
+                                            <div className="flex bg-[#0f172a] p-1 rounded-lg border border-slate-700 text-[9px] font-bold">
+                                                <button onClick={() => setIsJsonMode(false)} className={`px-3 py-1 rounded-md transition-all flex items-center gap-1 ${!isJsonMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'}`}><Icon name="Type" size={10} /> 文字</button>
+                                                <button onClick={() => setIsJsonMode(true)} className={`px-3 py-1 rounded-md transition-all flex items-center gap-1 ${isJsonMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'}`}><Icon name="Code" size={10} /> JSON</button>
+                                            </div>
+                                        </div>
+                                        <div className="bg-[#0f172a] p-5 rounded-2xl border border-slate-700 min-h-[200px] text-sm text-slate-300 custom-scrollbar overflow-y-auto">
+                                            {isJsonMode ? <pre className="text-emerald-400 whitespace-pre-wrap font-mono text-[11px] leading-tight">{generateJson()}</pre> : <p className="italic leading-relaxed">"{generatePrompt()}"</p>}
+                                        </div>
+                                    </div>
+
+                                    <button onClick={copyToClipboard} className={`w-full mt-8 py-5 rounded-2xl flex items-center justify-center gap-3 font-black text-sm uppercase tracking-widest transition-all ${copied ? 'bg-emerald-500 text-slate-900 scale-95' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xl shadow-indigo-600/20 active:scale-95'}`}>
+                                        {copied ? <Icon name="Check" size={20} /> : <Icon name="Copy" size={20} />} {copied ? '已複製' : '複製內容'}
+                                    </button>
+                                </section>
+                            </div>
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
